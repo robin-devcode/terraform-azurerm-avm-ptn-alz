@@ -74,11 +74,43 @@ locals {
 locals {
   policy_role_assignments = data.alz_architecture.this.policy_role_assignments != null ? {
     for pra in data.alz_architecture.this.policy_role_assignments : uuidv5("url", "${pra.policy_assignment_name}${pra.scope}${pra.management_group_id}${pra.role_definition_id}") => {
+      management_group_id = pra.management_group_id
+      policy_assignment_name = pra.policy_assignment_name
       principal_id       = lookup(local.policy_assignment_identities, "${pra.management_group_id}/${pra.policy_assignment_name}", { principal_id = null }).principal_id
       role_definition_id = startswith(lower(pra.scope), "/subscriptions") ? "/subscriptions/${split("/", pra.scope)[2]}${pra.role_definition_id}" : pra.role_definition_id
       scope              = pra.scope
-    } if !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000")
+    } if !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000") && (
+      length(split("/", pra.scope)) < 9 || 
+      split("/", pra.scope)[7] != "Microsoft.Network" || 
+      split("/", pra.scope)[8] != "privateDnsZones" ||
+      (var.allowed_private_dns_zones != null ? 
+        contains(var.allowed_private_dns_zones, split("/", pra.scope)[9]) : 
+        contains(local.actual_dns_zones, split("/", pra.scope)[9])
+      )
+    )
   } : {}
+}
+
+
+locals {
+  actual_dns_zones = var.dependencies.policy_assignments != null ? flatten([
+    for dep in var.dependencies.policy_assignments :
+    dep != null ? [
+      for resource_id in dep :
+      length(split("/", resource_id)) >= 9 && split("/", resource_id)[7] == "Microsoft.Network" && split("/", resource_id)[8] == "privateDnsZones" ?
+      split("/", resource_id)[9] : null
+    ] : []
+  ]) : []
+}
+
+locals {
+  allowed_dns_zones = flatten([
+    var.dependencies.policy_assignments != null ? [
+      for dep in var.dependencies.policy_assignments :
+      dep != null ? keys(dep) : []
+    ] : [],
+    []
+  ])
 }
 
 locals {

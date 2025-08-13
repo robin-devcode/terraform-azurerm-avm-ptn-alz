@@ -617,3 +617,14 @@ The object has attributes for each resource type, with the following optional at
 Each time duration is parsed using this function: <https://pkg.go.dev/time#ParseDuration>.
 DESCRIPTION
 }
+
+variable "allowed_private_dns_zones" {
+  type        = set(string)
+  default     = null
+  description = <<DESCRIPTION
+A set of private DNS zone names that should have policy role assignments created.
+If null, all DNS zones will have role assignments created (current behavior).
+If set, only DNS zones in this list will have role assignments created.
+DNS zone names should be in the format like 'privatelink.blob.core.windows.net'.
+DESCRIPTION
+}
