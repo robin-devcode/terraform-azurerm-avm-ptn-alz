@@ -80,38 +80,21 @@ locals {
       role_definition_id = startswith(lower(pra.scope), "/subscriptions") ? "/subscriptions/${split("/", pra.scope)[2]}${pra.role_definition_id}" : pra.role_definition_id
       scope              = pra.scope
     } if !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000") && (
-      length(split("/", pra.scope)) < 9 || 
-      split("/", pra.scope)[7] != "Microsoft.Network" || 
-      split("/", pra.scope)[8] != "privateDnsZones" ||
-      (var.allowed_private_dns_zones != null ? 
-        contains(var.allowed_private_dns_zones, split("/", pra.scope)[9]) : 
-        contains(local.actual_dns_zones, split("/", pra.scope)[9])
+      # If it's not a DNS zone scope, always include the role assignment
+      (length(split("/", pra.scope)) < 9 || 
+       split("/", pra.scope)[7] != "Microsoft.Network" || 
+       split("/", pra.scope)[8] != "privateDnsZones") ||
+      # If it IS a DNS zone scope, only include if explicitly allowed
+      (length(split("/", pra.scope)) >= 9 && 
+       split("/", pra.scope)[7] == "Microsoft.Network" && 
+       split("/", pra.scope)[8] == "privateDnsZones" &&
+       var.allowed_private_dns_zones != null &&
+       contains(var.allowed_private_dns_zones, split("/", pra.scope)[9])
       )
     )
   } : {}
 }
 
-
-locals {
-  actual_dns_zones = var.dependencies.policy_assignments != null ? flatten([
-    for dep in var.dependencies.policy_assignments :
-    dep != null ? [
-      for resource_id in dep :
-      length(split("/", resource_id)) >= 9 && split("/", resource_id)[7] == "Microsoft.Network" && split("/", resource_id)[8] == "privateDnsZones" ?
-      split("/", resource_id)[9] : null
-    ] : []
-  ]) : []
-}
-
-locals {
-  allowed_dns_zones = flatten([
-    var.dependencies.policy_assignments != null ? [
-      for dep in var.dependencies.policy_assignments :
-      dep != null ? keys(dep) : []
-    ] : [],
-    []
-  ])
-}
 
 locals {
   role_definitions = {
