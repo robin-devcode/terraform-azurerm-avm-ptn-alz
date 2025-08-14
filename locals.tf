@@ -74,15 +74,11 @@ locals {
 locals {
   policy_role_assignments = data.alz_architecture.this.policy_role_assignments != null ? {
     for pra in data.alz_architecture.this.policy_role_assignments : uuidv5("url", "${pra.policy_assignment_name}${pra.scope}${pra.management_group_id}${pra.role_definition_id}") => {
-      management_group_id    = pra.management_group_id
-      policy_assignment_name = pra.policy_assignment_name
-      principal_id           = lookup(local.policy_assignment_identities, "${pra.management_group_id}/${pra.policy_assignment_name}", { principal_id = null }).principal_id
-      role_definition_id     = startswith(lower(pra.scope), "/subscriptions") ? "/subscriptions/${split("/", pra.scope)[2]}${pra.role_definition_id}" : pra.role_definition_id
-      scope                  = pra.scope
+      principal_id       = lookup(local.policy_assignment_identities, "${pra.management_group_id}/${pra.policy_assignment_name}", { principal_id = null }).principal_id
+      role_definition_id = startswith(lower(pra.scope), "/subscriptions") ? "/subscriptions/${split("/", pra.scope)[2]}${pra.role_definition_id}" : pra.role_definition_id
+      scope              = pra.scope
     } if (
-      # Exclude placeholder scopes
       !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000") &&
-      # For DNS zones: if dependencies provided, only create those; if no dependencies, create all
       (
         !strcontains(pra.scope, "/providers/Microsoft.Network/privateDnsZones/") ||
         length(local.allowed_dns_zone_scopes) == 0 ||
@@ -93,8 +89,6 @@ locals {
 }
 
 locals {
-  # Extract private DNS zone resource IDs from dependencies
-  # Look for nested structures containing DNS zone resource IDs
   dependency_dns_zone_resource_ids = flatten([
     for dep in try(var.dependencies.policy_assignments, []) : 
       dep != null && can(keys(dep)) ? flatten([
@@ -104,8 +98,6 @@ locals {
         ]
       ]) : []
   ])
-
-  # Create a set of DNS zone scopes that should have role assignments
   allowed_dns_zone_scopes = toset(local.dependency_dns_zone_resource_ids)
 }
 
