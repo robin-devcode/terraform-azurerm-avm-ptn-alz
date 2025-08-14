@@ -82,8 +82,8 @@ locals {
     } if (
       # Exclude placeholder scopes
       !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000") &&
-      # For DNS zones, only create if the scope exists in provided dependencies or explicitly allowed
-      (!local.is_private_dns_zone_scope[pra.scope] || local.should_create_dns_zone_role_assignment[pra.scope])
+      # For DNS zones, only create if the scope exists in provided dependencies
+      (!contains(local.private_dns_zone_scopes, pra.scope) || contains(local.allowed_dns_zone_scopes, pra.scope))
     )
   } : {}
 }
@@ -100,16 +100,16 @@ locals {
     if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
   ])
   
-  # Determine if a scope is a private DNS zone scope
-  is_private_dns_zone_scope = data.alz_architecture.this.policy_role_assignments != null ? {
-    for pra in data.alz_architecture.this.policy_role_assignments : pra.scope => (
-      can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", pra.scope))
-    )
-  } : {}
+  # Create a set of unique scopes that are private DNS zones (for efficient lookup)
+  private_dns_zone_scopes = data.alz_architecture.this.policy_role_assignments != null ? toset([
+    for pra in data.alz_architecture.this.policy_role_assignments : pra.scope
+    if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", pra.scope))
+  ]) : toset([])
   
-  # Determine if a DNS zone role assignment should be created
+  # Determine if a DNS zone role assignment should be created (using unique keys)
   should_create_dns_zone_role_assignment = data.alz_architecture.this.policy_role_assignments != null ? {
-    for pra in data.alz_architecture.this.policy_role_assignments : pra.scope => (
+    for pra in data.alz_architecture.this.policy_role_assignments : 
+    uuidv5("url", "${pra.policy_assignment_name}${pra.scope}${pra.management_group_id}${pra.role_definition_id}") => (
       # If dependencies provide DNS zones, check if this scope is in the allowed list
       contains(local.allowed_dns_zone_scopes, pra.scope)
     )
