@@ -94,14 +94,11 @@ locals {
   dependency_dns_zone_resource_ids = flatten([
     for dep in try(var.dependencies.policy_assignments, []) : 
       dep != null && can(keys(dep)) ? flatten([
-        for hub_key, hub_zones in dep : 
-          can(keys(hub_zones)) ? [
-            for zone_name, resource_id in hub_zones : resource_id
-            if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
-          ] : [
-            # If hub_zones is a string and looks like a DNS zone resource ID, include it
-            can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", hub_zones)) ? [hub_zones] : []
-          ]
+        for hub_key, hub_zones in dep : [
+          # If hub_zones is a map/object, extract DNS zone resource IDs from it
+          for zone_name, resource_id in can(keys(hub_zones)) ? hub_zones : {} : resource_id
+          if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
+        ]
       ]) : []
   ])
 
