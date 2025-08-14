@@ -90,15 +90,19 @@ locals {
 
 locals {
   # Extract private DNS zone resource IDs from dependencies
+  # Handle the nested structure from alz-connectivity module: { hub_key => { zone_name => resource_id } }
   dependency_dns_zone_resource_ids = flatten([
-    for dep in try(var.dependencies.policy_assignments, []) : dep if dep != null
+    for dep in try(var.dependencies.policy_assignments, []) : 
+      dep != null ? flatten([
+        for hub_key, hub_zones in try(dep, {}) : [
+          for zone_name, resource_id in try(hub_zones, {}) : resource_id
+          if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
+        ]
+      ]) : []
   ])
-  
+
   # Create a set of DNS zone scopes that should have role assignments
-  allowed_dns_zone_scopes = toset([
-    for resource_id in local.dependency_dns_zone_resource_ids : resource_id
-    if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
-  ])
+  allowed_dns_zone_scopes = toset(local.dependency_dns_zone_resource_ids)
   
   # Create a set of unique scopes that are private DNS zones (for efficient lookup)
   private_dns_zone_scopes = data.alz_architecture.this.policy_role_assignments != null ? toset([
