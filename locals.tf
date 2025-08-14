@@ -82,43 +82,31 @@ locals {
     } if (
       # Exclude placeholder scopes
       !strcontains(pra.scope, "00000000-0000-0000-0000-000000000000") &&
-      # For DNS zones, only create if the scope exists in provided dependencies
-      (!contains(local.private_dns_zone_scopes, pra.scope) || contains(local.allowed_dns_zone_scopes, pra.scope))
+      # For DNS zones: if dependencies provided, only create those; if no dependencies, create all
+      (
+        !strcontains(pra.scope, "/providers/Microsoft.Network/privateDnsZones/") ||
+        length(local.allowed_dns_zone_scopes) == 0 ||
+        contains(local.allowed_dns_zone_scopes, pra.scope)
+      )
     )
   } : {}
 }
 
 locals {
   # Extract private DNS zone resource IDs from dependencies
-  # Handle mixed data types - only process map structures that contain DNS zones
+  # Look for nested structures containing DNS zone resource IDs
   dependency_dns_zone_resource_ids = flatten([
     for dep in try(var.dependencies.policy_assignments, []) : 
       dep != null && can(keys(dep)) ? flatten([
         for hub_key, hub_zones in dep : [
-          # If hub_zones is a map/object, extract DNS zone resource IDs from it
           for zone_name, resource_id in can(keys(hub_zones)) ? hub_zones : {} : resource_id
-          if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
+          if strcontains(resource_id, "/providers/Microsoft.Network/privateDnsZones/")
         ]
       ]) : []
   ])
 
   # Create a set of DNS zone scopes that should have role assignments
   allowed_dns_zone_scopes = toset(local.dependency_dns_zone_resource_ids)
-  
-  # Create a set of unique scopes that are private DNS zones (for efficient lookup)
-  private_dns_zone_scopes = data.alz_architecture.this.policy_role_assignments != null ? toset([
-    for pra in data.alz_architecture.this.policy_role_assignments : pra.scope
-    if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", pra.scope))
-  ]) : toset([])
-  
-  # Determine if a DNS zone role assignment should be created (using unique keys)
-  should_create_dns_zone_role_assignment = data.alz_architecture.this.policy_role_assignments != null ? {
-    for pra in data.alz_architecture.this.policy_role_assignments : 
-    uuidv5("url", "${pra.policy_assignment_name}${pra.scope}${pra.management_group_id}${pra.role_definition_id}") => (
-      # If dependencies provide DNS zones, check if this scope is in the allowed list
-      contains(local.allowed_dns_zone_scopes, pra.scope)
-    )
-  } : {}
 }
 
 
