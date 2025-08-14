@@ -90,14 +90,18 @@ locals {
 
 locals {
   # Extract private DNS zone resource IDs from dependencies
-  # Handle the nested structure from alz-connectivity module: { hub_key => { zone_name => resource_id } }
+  # Handle mixed data types - only process map structures that contain DNS zones
   dependency_dns_zone_resource_ids = flatten([
     for dep in try(var.dependencies.policy_assignments, []) : 
-      dep != null ? flatten([
-        for hub_key, hub_zones in try(dep, {}) : [
-          for zone_name, resource_id in try(hub_zones, {}) : resource_id
-          if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
-        ]
+      dep != null && can(keys(dep)) ? flatten([
+        for hub_key, hub_zones in dep : 
+          can(keys(hub_zones)) ? [
+            for zone_name, resource_id in hub_zones : resource_id
+            if can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", resource_id))
+          ] : [
+            # If hub_zones is a string and looks like a DNS zone resource ID, include it
+            can(regex("^/subscriptions/.+/resourceGroups/.+/providers/Microsoft.Network/privateDnsZones/.+$", hub_zones)) ? [hub_zones] : []
+          ]
       ]) : []
   ])
 
