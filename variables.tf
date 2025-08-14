@@ -617,31 +617,3 @@ The object has attributes for each resource type, with the following optional at
 Each time duration is parsed using this function: <https://pkg.go.dev/time#ParseDuration>.
 DESCRIPTION
 }
-
-variable "allowed_private_dns_zones" {
-  type        = set(string)
-  default     = null
-  description = <<DESCRIPTION
-A set of private DNS zone names that should have policy role assignments created.
-
-This variable controls which private DNS zones get role assignments created for Azure Policy compliance.
-- If `null` (default): No DNS zone role assignments will be created, preventing issues with unwanted role assignments
-- If set to a list: Only DNS zones in this list will have role assignments created
-
-This resolves issues where the module creates role assignments for all possible Azure private link DNS zones,
-even those that don't exist in your environment, which can cause deployment issues.
-
-DNS zone names should be in the format like:
-- 'privatelink.blob.core.windows.net'
-- 'privatelink.database.windows.net'
-- 'corp.example.com'
-
-Example:
-```hcl
-allowed_private_dns_zones = [
-  "privatelink.blob.core.windows.net",
-  "privatelink.database.windows.net"
-]
-```
-DESCRIPTION
-}
